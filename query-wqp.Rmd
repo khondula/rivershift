@@ -1,13 +1,13 @@
 ---
 title: "Query NWIS for time series"
 output: 
-  html_notebook: 
-    toc: yes
-    toc_depth: 2
   html_document:
     toc: true
     toc_depth: 2
     toc_float: true
+  html_notebook: 
+    toc: yes
+    toc_depth: 2
 author: 'Kelly Hondula'
 editor_options: 
   chunk_output_type: inline
@@ -30,6 +30,7 @@ library(glue)
 library(ggplot2)
 library(purrr)
 library(readr)
+library(DT)
 ```
 
 Overview of data https://owi.usgs.gov/R/dataRetrieval.html#3
@@ -45,33 +46,44 @@ unique(parameterCdFile$parameter_group_nm)
 
 The column `parameter_nm` in the parameter code table contains longer descriptions. Use the `grep()` function to search the text in this column to find descriptions containing the word "phosphorus". 
 
+## List of phosphorus codes
+
 ```{r}
-names(parameterCdFile)
 phosCds_df <- parameterCdFile[grep("phosphorus",
                                 parameterCdFile$parameter_nm,
                                 ignore.case=TRUE),]
-unique(phosCds_df$parameter_nm)
 p_codes <- unique(phosCds_df$parameter_cd)
 ```
+
+```{r, echo = FALSE, results='asis'}
+DT::datatable(phosCds_df) 
+```
+
+## List of nitrogen codes
 
 ```{r}
 nitCds_df <- parameterCdFile[grep("nitrogen",
                                 parameterCdFile$parameter_nm,
                                 ignore.case=TRUE),]
-unique(nitCds_df$parameter_nm)
 n_codes <- unique(nitCds_df$parameter_cd)
 ```
 
-List of chl codes
+```{r, echo = FALSE, results='asis'}
+DT::datatable(nitCds_df) 
+```
+
+## List of chl codes
 
 ```{r}
 chlCds_df <- parameterCdFile[grep("chlorophyll",
                                 parameterCdFile$parameter_nm,
                                 ignore.case=TRUE),]
-unique(chlCds_df$parameter_nm)
 chl_codes <- unique(chlCds_df$parameter_cd)
 ```
 
+```{r, echo = FALSE, results='asis'}
+DT::datatable(chlCds_df) 
+```
 
 # Search NWIS water quality data
 
@@ -81,7 +93,7 @@ There needs to be at least one "major" filter for searching NWIS data. Strategy 
 Define function to save a csv file based on a state and set of parameter codes. use a code for the file name
 
 ```{r}
-save_10yr_ts <- function(state_abbrev, my_codes, my_codes_cat = "chl"){
+save_10yr_ts_nwis <- function(state_abbrev, my_codes, my_codes_cat = "chl"){
   whatNWISdata(stateCd = state_abbrev,
   parameterCd = my_codes) %>% 
   mutate(date_range_interval = ymd(begin_date) %--% ymd(end_date),
@@ -95,20 +107,20 @@ save_10yr_ts <- function(state_abbrev, my_codes, my_codes_cat = "chl"){
 Use function to save file for each state and set of codes
 
 ```{r, eval = FALSE, cache=TRUE}
-purrr::walk(state.abb, ~save_10yr_ts(state_abbrev = .x, 
+purrr::walk(state.abb, ~save_10yr_ts_nwis(state_abbrev = .x, 
                                      my_codes = chl_codes, 
                                      my_codes_cat = "chl"))
 
-purrr::walk(state.abb, ~save_10yr_ts(state_abbrev = .x, 
+purrr::walk(state.abb, ~save_10yr_ts_nwis(state_abbrev = .x, 
                                      my_codes = p_codes, 
                                      my_codes_cat = "phos"))
 
 # max 100 parameter codes so split up n codes
-purrr::walk(state.abb, ~save_10yr_ts(state_abbrev = .x, 
+purrr::walk(state.abb, ~save_10yr_ts_nwis(state_abbrev = .x, 
                                      my_codes = n_codes[1:100], 
                                      my_codes_cat = "nitr1"))
 
-purrr::walk(state.abb, ~save_10yr_ts(state_abbrev = .x, 
+purrr::walk(state.abb, ~save_10yr_ts_nwis(state_abbrev = .x, 
                                      my_codes = n_codes[101:178], 
                                      my_codes_cat = "nitr2"))
 ```
@@ -120,13 +132,13 @@ Read in all separate state files and combine, then Join with site codes informat
 par_codes_for_join <- dplyr::select(parameterCdFile, parameter_cd, 
                                     parameter_nm, parameter_units)
 
-nwis_chl_ts <- purrr::map_df(fs::dir_ls("data", regexp = "chl"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+nwis_chl_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*chl"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
 
-nwis_phos_ts <- purrr::map_df(fs::dir_ls("data", regexp = "phos"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+nwis_phos_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*phos"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
 
-nwis_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nitr"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+nwis_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*nitr"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
 
 ```
@@ -141,7 +153,7 @@ readr::write_csv(nwis_nitr_ts, "nitr_nwis_ts.csv")
 
 ## Get data values from NWIS
 
-Example of getting data from first time series with `readNWISdata` function.
+Example of getting data from one row of time series data frame with `readNWISqw` function.
 
 ```{r}
 my_site <-  nwis_chl_ts$site_no[2]
@@ -170,27 +182,95 @@ chl_nwis_data_ex %>%
 
 # Water Quality Portal 
 
-# Daily data
+That was searching NWIS, which is USGS data. The water quality portal includes data from states, EPA, USDA, etc. Note details about differences here: https://owi.usgs.gov/R/dataRetrieval.html#23. 
+
+> There's not a function in WQP that returns period of record information like we did above via NWIS data…(that feature may be implemented in the future). The following function returns sites that have collected phosphorus data in Wisconsin. There's no way to know if that site has collected one sample, or thousands.
+
+Need to use characteristic names for all of WQP which [only seem to be available](https://github.com/USGS-R/dataRetrieval/issues/417) here: https://www.waterqualitydata.us/Codes/Characteristicname?mimeType=xml
+
+**MonitoringLocationIdentifier**: A designator used to describe the unique name, number, or code assigned to identify the monitoring location.
 
 ```{r}
-?readNWISdv
+save_10yr_ts_wqp <- function(state_abbrev, 
+                             char_name = "Phosphorus",
+                             my_codes_cat = "phos"){
+  
+  char_Data <- readWQPdata(statecode = state_abbrev,
+                           CharacteristicName = char_name)
+
+  siteInfo <- attr(char_Data, "siteInfo")
+
+  char_Summary <- char_Data %>%
+    group_by(MonitoringLocationIdentifier, 
+             CharacteristicName,
+             ResultMeasure.MeasureUnitCode) %>%
+    summarise(count=n(),
+            begin_datetime = min(ActivityStartDateTime),
+            end_datetime = max(ActivityStartDateTime),
+            max = max(ResultMeasureValue, na.rm = TRUE)) %>%
+    arrange(-count) %>%
+    left_join(siteInfo, by = "MonitoringLocationIdentifier")
+
+  char_Summary_10yrs <- char_Summary %>%
+    mutate(begin_date = as.Date(begin_datetime),
+         end_date = as.Date(end_datetime)) %>%
+    mutate(date_range_interval = ymd(begin_date) %--% ymd(end_date),
+         date_range_yrs = 
+           suppressMessages(as.period(date_range_interval))/years()) %>%
+    dplyr::filter(date_range_yrs > 10) %>%
+    arrange(-date_range_yrs)
+  
+  readr::write_csv(char_Summary_10yrs, 
+                 glue("data/wqp_query_{my_codes_cat}-{state_abbrev}.csv"))
+                             }
+
+
 ```
 
-# Water quality data
+Run function over states to save results of 10 year + time series from WQP. This may include duplicates of what is in NWIS?
 
+```{r, eval = FALSE, cache=TRUE}
 
-```{r}
-?readNWISqw
-# readNWISqw(siteNumbers, parameterCd, 
-#            startDate = "",
-#            endDate = "",
-#            expanded = TRUE,
-#            reshape = FALSE)
+purrr::walk(state.abb, ~save_10yr_ts_wqp(state_abbrev = .x, 
+                                     char_name = "Phosphorus", 
+                                     my_codes_cat = "phos"
+                                     ))
+
+purrr::walk(state.abb, ~save_10yr_ts_wqp(state_abbrev = .x, 
+                                     char_name = "Chlorophyll",  
+                                     my_codes_cat = "chl"))
+
+purrr::walk(state.abb, ~save_10yr_ts_wqp(state_abbrev = .x, 
+                                     char_name = "Nitrogen",, 
+                                     my_codes_cat = "nitr"))
+
 ```
 
-# Site info
+Read in groups of CSV files to save summary tables for all states for each parameter
 
 ```{r}
-?readNWISsite
+fs::dir_ls("data", regexp = "wqp.*phos")[1] %>%
+  read_csv() %>% names()
+
+wqp_col_types <- cols("begin_date" = "D", 
+                      "end_date" = "D", 
+                      "hucCd" = "c",
+                      "HUCEightDigitCode" = "c",
+                      "VerticalAccuracyMeasure.MeasureValue" = "n",
+                      "HorizontalAccuracyMeasure.MeasureValue" = "n",
+                      "VerticalMeasure.MeasureValue" = "n",
+                      "StateCode" = "i")
+
+wqp_phos_ts <- purrr::map_df(fs::dir_ls("data", regexp = "wqp.*phos"),
+                              ~readr::read_csv(.x, col_types = wqp_col_types))
+  # ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+  # left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
+# 
+# nwis_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*nitr"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+#   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
+
+# nwis_chl_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*chl"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+#   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
+
 ```
 
