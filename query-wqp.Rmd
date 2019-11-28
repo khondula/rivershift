@@ -1,5 +1,5 @@
 ---
-title: "Query NWIS for time series"
+title: "Query NWIS and Water Quality Portal for time series"
 output: 
   html_document:
     toc: true
@@ -85,7 +85,7 @@ chl_codes <- unique(chlCds_df$parameter_cd)
 DT::datatable(chlCds_df) 
 ```
 
-# Search NWIS water quality data
+# NWIS water quality data
 
 There needs to be at least one "major" filter for searching NWIS data. Strategy is to go through all the states to get a table of what is available through NWIS, using the built in vector of state abbreviations (`state.abb`)
 
