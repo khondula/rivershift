@@ -198,6 +198,7 @@ save_10yr_ts_wqp <- function(state_abbrev,
   char_Data <- readWQPdata(statecode = state_abbrev,
                            CharacteristicName = char_name)
 
+  if(!is.null(char_Data)){
   siteInfo <- attr(char_Data, "siteInfo")
 
   char_Summary <- char_Data %>%
@@ -221,7 +222,9 @@ save_10yr_ts_wqp <- function(state_abbrev,
     arrange(-date_range_yrs)
   
   readr::write_csv(char_Summary_10yrs, 
-                 glue("data/wqp_query_{my_codes_cat}-{state_abbrev}.csv"))
+                 glue("data/wqp_query_{my_codes_cat}-{state_abbrev}.csv"))    
+  }
+
                              }
 
 
@@ -241,7 +244,7 @@ purrr::walk(state.abb, ~save_10yr_ts_wqp(state_abbrev = .x,
                                      my_codes_cat = "chl"))
 
 purrr::walk(state.abb, ~save_10yr_ts_wqp(state_abbrev = .x, 
-                                     char_name = "Nitrogen",, 
+                                     char_name = "Nitrogen", 
                                      my_codes_cat = "nitr"))
 
 ```
@@ -249,8 +252,6 @@ purrr::walk(state.abb, ~save_10yr_ts_wqp(state_abbrev = .x,
 Read in groups of CSV files to save summary tables for all states for each parameter
 
 ```{r}
-fs::dir_ls("data", regexp = "wqp.*phos")[1] %>%
-  read_csv() %>% names()
 
 wqp_col_types <- cols("begin_date" = "D", 
                       "end_date" = "D", 
@@ -259,18 +260,39 @@ wqp_col_types <- cols("begin_date" = "D",
                       "VerticalAccuracyMeasure.MeasureValue" = "n",
                       "HorizontalAccuracyMeasure.MeasureValue" = "n",
                       "VerticalMeasure.MeasureValue" = "n",
-                      "StateCode" = "i")
+                      "StateCode" = "i",
+                      "CountyCode" = "c",
+                      "ConstructionDateText" = "c",
+                      "WellDepthMeasure.MeasureValue" = "c",
+                      "WellHoleDepthMeasure.MeasureValue" = "c",
+                      "count" = "n",
+                      "begin_datetime" = "D",
+                      "end_datetime" = "D",
+                      "max" = "n",
+                      "dec_lat_va" = "n",
+                      "dec_lon_va" = "n",
+                      "LatitudeMeasure" = "n",
+                      "LongitudeMeasure" = "n",
+                      "date_range_interval" = "c",
+                      "date_range_yrs" = "n",
+                      "DrainageAreaMeasure.MeasureValue" = "n",
+                      "ContributingDrainageAreaMeasure.MeasureValue" = "n",
+                      "SourceMapScaleNumeric" = "n")
 
 wqp_phos_ts <- purrr::map_df(fs::dir_ls("data", regexp = "wqp.*phos"),
                               ~readr::read_csv(.x, col_types = wqp_col_types))
-  # ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
-  # left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
-# 
-# nwis_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*nitr"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
-#   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
 
-# nwis_chl_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*chl"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
-#   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
+wqp_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "wqp.*nitr"),
+                              ~readr::read_csv(.x, col_types = wqp_col_types))
 
+wqp_chl_ts <- purrr::map_df(fs::dir_ls("data", regexp = "wqp.*chl"),
+                              ~readr::read_csv(.x, col_types = wqp_col_types))
+
+```
+
+```{r}
+wqp_phos_ts %>% readr::write_csv("phos_wqp_ts.csv")
+wqp_nitr_ts %>% readr::write_csv("nitr_wqp_ts.csv")
+wqp_chl_ts %>% readr::write_csv("chl_wqp_ts.csv")
 ```
 
