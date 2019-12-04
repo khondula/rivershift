@@ -1,5 +1,7 @@
 # rivershift
 
+[Map](https://khondula.github.io/rivershift/sites-map.html) of NWIS stream sites with N, P, chl at least 10 years
+
 Time series longer than 10 years
 
 ## NWIS
@@ -13,5 +15,3 @@ Time series longer than 10 years
 * [Chlorophyll](https://khondula.github.io/rivershift/wqp-chl)
 * [Phosphorus](https://khondula.github.io/rivershift/wqp-phos)
 * [Nitrogen](https://khondula.github.io/rivershift/wqp-nitr)
-
-Code: https://khondula.github.io/rivershift/query-wqp.nb.html
