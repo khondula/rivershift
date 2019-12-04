@@ -217,6 +217,8 @@ get_nwis_site_data <- function(site_id){
                                  ~readNWISqw(siteNumbers = site_id,
                            parameterCd = .x)) %>%
     purrr::map(~mutate(.x, rpt_lev_va = as.character(rpt_lev_va))) %>% 
+    purrr::map(~mutate(.x, sample_dt = as.character(sample_dt))) %>% 
+    purrr::map(~mutate(.x, prep_set_no = as.character(prep_set_no))) %>% 
     bind_rows()
     
   
@@ -248,10 +250,11 @@ get_nwis_site_data <- function(site_id){
 
 ```{r}
 get_nwis_site_data(site_id = sites_all3[1])
-purrr::walk(sites_all3[1:10], ~get_nwis_site_data(.x))
+purrr::walk(sites_all3, ~get_nwis_site_data(.x))
 
-purrr::walk(sites_all3[35:length(sites_all3)], ~get_nwis_site_data(.x))
-
+purrr::walk(sites_all3[347:length(sites_all3)], ~get_nwis_site_data(.x))
+sites_all3[338] # no data? 
+grep("14206425", sites_all3)
 # read in all sites and save as one big table
 # readr::write_csv(nwis_data_10yr_sums, "nwis_all3_10yr_summaries.csv")
 ```
