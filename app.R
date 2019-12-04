@@ -29,7 +29,7 @@ ui <- fluidPage(
             tabsetPanel(
                 tabPanel("summary", tableOutput("summary_table")),
                 tabPanel("data", tableOutput("site_data_df")),
-                tabPanel("plots", plotOutput("ts_plots", height = "800px")))
+                tabPanel("plots", plotOutput("ts_plots", height = "2000px")))
             )
         )
     )
@@ -81,9 +81,10 @@ server <- function(input, output) {
             dplyr::select(parm_cd, result_va, start_datetime, parameter_nm, category) 
         
        site_plot_data %>%
+           arrange(category) %>%
             ggplot(aes(x = start_datetime, y = result_va)) +
             geom_point(aes(fill = category), pch = 21, size = 2) +
-            facet_wrap(vars(parameter_nm), scales = "free_y") +
+            facet_wrap(vars(parameter_nm), scales = "free_y", ncol = 1) +
             theme(legend.position = "none")
     })
 }
