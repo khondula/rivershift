@@ -18,4 +18,4 @@ sites_sf <- st_as_sf(site_info,
 leaflet() %>%
   addTiles() %>%
   addMarkers(data = sites_sf, clusterOptions = markerClusterOptions(), 
-             popup = ~glue("{station_nm} <br> Drainage Area: {drain_area_va}"))
+             popup = ~glue("{station_nm} <br> Drainage Area: {drain_area_va} sq mi"))
