@@ -16,6 +16,8 @@ sites_sf <- st_as_sf(site_info,
                      crs = 4269)
 
 leaflet() %>%
-  addTiles() %>%
+  addTiles(group = "Open Street Maps") %>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "World Imagery") %>%
   addMarkers(data = sites_sf, clusterOptions = markerClusterOptions(), 
-             popup = ~glue("{station_nm} <br> Drainage Area: {drain_area_va} sq mi"))
+             popup = ~glue("{station_nm} <br> Drainage Area: {drain_area_va} sq mi")) %>%
+  addLayersControl(baseGroups = c("Open Street Maps", "World Imagery"))
