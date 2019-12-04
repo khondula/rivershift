@@ -10,7 +10,7 @@ output:
     toc_depth: 2
 author: 'Kelly Hondula'
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 
@@ -31,6 +31,8 @@ library(ggplot2)
 library(purrr)
 library(readr)
 library(DT)
+library(stringr)
+library(kableExtra)
 ```
 
 Overview of data https://owi.usgs.gov/R/dataRetrieval.html#3
@@ -49,11 +51,13 @@ The column `parameter_nm` in the parameter code table contains longer descriptio
 ## List of phosphorus codes
 
 ```{r}
-phosCds_df <- parameterCdFile[grep("phosphorus",
-                                parameterCdFile$parameter_nm,
-                                ignore.case=TRUE),]
+phosCds_df <- parameterCdFile %>%
+  filter(stringr::str_detect(parameter_nm, pattern = fixed('phosphorus', ignore_case = TRUE))) %>%
+  filter(parameter_group_nm != "Information")
+
 p_codes <- unique(phosCds_df$parameter_cd)
 ```
+
 
 ```{r, echo = FALSE, results='asis'}
 DT::datatable(phosCds_df) 
@@ -62,27 +66,44 @@ DT::datatable(phosCds_df)
 ## List of nitrogen codes
 
 ```{r}
-nitCds_df <- parameterCdFile[grep("nitrogen",
-                                parameterCdFile$parameter_nm,
-                                ignore.case=TRUE),]
+nitCds_df <-  parameterCdFile %>%
+  filter(stringr::str_detect(parameter_nm, pattern = fixed('nitrogen', ignore_case = TRUE))) %>%
+  filter(!parameter_group_nm %in% c("Physical", "Inorganics, Major, Non-metals", "Stable Isotopes", "Toxicity"))
 n_codes <- unique(nitCds_df$parameter_cd)
 ```
+
 
 ```{r, echo = FALSE, results='asis'}
 DT::datatable(nitCds_df) 
 ```
 
+
 ## List of chl codes
 
 ```{r}
-chlCds_df <- parameterCdFile[grep("chlorophyll",
-                                parameterCdFile$parameter_nm,
-                                ignore.case=TRUE),]
+chlCds_df <- parameterCdFile %>%
+  filter(stringr::str_detect(parameter_nm, pattern = fixed('chlorophyll', ignore_case = TRUE)))
+
 chl_codes <- unique(chlCds_df$parameter_cd)
 ```
 
 ```{r, echo = FALSE, results='asis'}
 DT::datatable(chlCds_df) 
+```
+
+Make a vector of all codes
+
+```{r}
+npc_codes <- c(chl_codes, n_codes, p_codes)
+npc_codes1 <- npc_codes[1:100]
+npc_codes2 <- npc_codes[101:200]
+npc_codes3 <- npc_codes[201:length(npc_codes)]
+npc_codes_df <- parameterCdFile %>% 
+  filter(parameter_cd %in% npc_codes) %>%
+  dplyr::select(parameter_cd, parameter_group_nm, parameter_nm, casrn, srsname, parameter_units) %>%
+  mutate(category = case_when(parameter_cd %in% chl_codes ~ "chl",
+                              parameter_cd %in% n_codes ~ "nitrogen",
+                              parameter_cd %in% p_codes ~ "phosphorus"))
 ```
 
 # NWIS water quality data
@@ -121,7 +142,7 @@ purrr::walk(state.abb, ~save_10yr_ts_nwis(state_abbrev = .x,
                                      my_codes_cat = "nitr1"))
 
 purrr::walk(state.abb, ~save_10yr_ts_nwis(state_abbrev = .x, 
-                                     my_codes = n_codes[101:178], 
+                                     my_codes = n_codes[101:length(n_codes)], 
                                      my_codes_cat = "nitr2"))
 ```
 
@@ -150,6 +171,91 @@ readr::write_csv(nwis_chl_ts, "chl_nwis_ts.csv")
 readr::write_csv(nwis_phos_ts, "phos_nwis_ts.csv")
 readr::write_csv(nwis_nitr_ts, "nitr_nwis_ts.csv")
 ```
+
+
+```{r, include = FALSE}
+kable(nwis_chl_ts) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Find sites that have P, N, and chl
+
+Using site numbers
+
+How many sites with both N and P?
+
+12,579
+
+```{r}
+sites_NP <- nwis_nitr_ts %>% 
+  filter(site_no %in% nwis_phos_ts$site_no) %>% 
+  pull(site_no) %>% unique()
+length(sites_NP)
+```
+
+How many sites with all 3? 
+
+453 sites 
+
+```{r}
+sites_all3 <- nwis_nitr_ts %>% 
+  filter(site_no %in% nwis_phos_ts$site_no) %>% 
+  filter(site_no %in% nwis_chl_ts$site_no) %>%
+  pull(site_no) %>% unique()
+
+length(sites_all3)
+```
+
+## Get summary of N, P, chl parameters for a site
+
+```{r}
+site_id <- sites_all3[35]
+
+get_nwis_site_data <- function(site_id){
+
+    nwis_data_site <- purrr::map(list(npc_codes1, npc_codes2, npc_codes3),
+                                 ~readNWISqw(siteNumbers = site_id,
+                           parameterCd = .x)) %>%
+    purrr::map(~mutate(.x, rpt_lev_va = as.character(rpt_lev_va))) %>% 
+    bind_rows()
+    
+  
+    readr::write_csv(nwis_data_site, 
+                   glue::glue("data/nwis_site_data/nwis-data_{site_id}.csv"))
+    
+  nwis_data_site10yr <- nwis_data_site %>% 
+    group_by(parm_cd) %>% 
+    summarise(n_count = n(),
+            min_datetime = as.Date(min(startDateTime)),
+            max_datetime = as.Date(max(startDateTime)),
+            min_year = lubridate::year(min(startDateTime)),
+            max_year = lubridate::year(max(startDateTime))) %>%
+  mutate(date_range_interval = ymd(min_datetime) %--% ymd(max_datetime),
+         date_range_yrs = suppressMessages(as.period(date_range_interval))/years()) %>%
+  left_join(npc_codes_df, by = c("parm_cd" = "parameter_cd")) %>%
+  arrange(-n_count) %>% 
+    filter(date_range_yrs > 10) %>%
+        mutate(site_no = site_id) %>%
+  dplyr::select(-min_datetime, -max_datetime, -date_range_interval)
+
+  readr::write_csv(nwis_data_site10yr, 
+                   glue::glue("data/nwis_site_summaries/nwis-summary_{site_id}.csv"))
+
+  # return(nwis_data_site10yr)
+}
+```
+
+
+```{r}
+get_nwis_site_data(site_id = sites_all3[1])
+purrr::walk(sites_all3[1:10], ~get_nwis_site_data(.x))
+
+purrr::walk(sites_all3[35:length(sites_all3)], ~get_nwis_site_data(.x))
+
+# read in all sites and save as one big table
+# readr::write_csv(nwis_data_10yr_sums, "nwis_all3_10yr_summaries.csv")
+```
+
 
 ## Get data values from NWIS
 
