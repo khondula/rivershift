@@ -39,10 +39,10 @@ Overview of data https://owi.usgs.gov/R/dataRetrieval.html#3
 
 # Create link to rivershift-data directory
 
-This function will create a local shortcut to the shared data directory (only run once)
+Create variable for data directory to save some typing
 
-```{r, eval = FALSE}
-file.symlink("/nfs/rivershift-data", "data")
+```{r}
+data_dir <- "/nfs/rivershift-data"
 ```
 
 
@@ -117,8 +117,13 @@ npc_codes_df <- parameterCdFile %>%
 
 # NWIS water quality data
 
-There needs to be at least one "major" filter for searching NWIS data. Strategy is to go through all the states to get a table of what is available through NWIS, using the built in vector of state abbreviations (`state.abb`)
+## Find Sites with at least 10 years of data for each parameter separately
 
+> whatNWISdata
+
+Only re-run this section code if a broader set of parameters is needed, otherwise skip to reading in results with chunk named `nwis_ts_x_parm`
+
+There needs to be at least one "major" filter for searching NWIS data. Strategy is to go through all the states to get a table of what is available through NWIS, using the built in vector of state abbreviations (`state.abb`)
 
 Define function to save a csv file based on a state and set of parameter codes. use a code for the file name
 
@@ -130,11 +135,11 @@ save_10yr_ts_nwis <- function(state_abbrev, my_codes, my_codes_cat = "chl"){
          date_range_yrs = suppressMessages(as.period(date_range_interval))/years()) %>%
   dplyr::filter(date_range_yrs > 10) %>%
   arrange(rev(date_range_yrs)) %>%
-  readr::write_csv(glue("data/us-data/nwis-query/nwis_query_{my_codes_cat}-{state_abbrev}.csv"))
+  readr::write_csv(glue("{data_dir}/nwis_query_{my_codes_cat}-{state_abbrev}.csv")) # change path here to re-run
 }
 ```
 
-Use function to save file for each state and set of codes
+Use function to save file for each state and set of codes. 
 
 ```{r, eval = FALSE, cache=TRUE}
 purrr::walk(state.abb, ~save_10yr_ts_nwis(state_abbrev = .x, 
@@ -162,13 +167,13 @@ Read in all separate state files and combine, then Join with site codes informat
 par_codes_for_join <- dplyr::select(parameterCdFile, parameter_cd, 
                                     parameter_nm, parameter_units)
 
-nwis_chl_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*chl"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+nwis_chl_ts <- purrr::map_df(fs::dir_ls("local-data", regexp = "nwis.*chl"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
 
-nwis_phos_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*phos"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+nwis_phos_ts <- purrr::map_df(fs::dir_ls("local-data", regexp = "nwis.*phos"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
 
-nwis_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*nitr"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
+nwis_nitr_ts <- purrr::map_df(fs::dir_ls("local-data", regexp = "nwis.*nitr"), ~readr::read_csv(.x, col_types = c("ccccddcccccc?c?c???c?DDn?n"))) %>%
   left_join(par_codes_for_join, by = c("parm_cd" = "parameter_cd"))
 
 ```
@@ -176,12 +181,20 @@ nwis_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "nwis.*nitr"), ~readr:
 Save combined file 
 
 ```{r}
-readr::write_csv(nwis_chl_ts, "chl_nwis_ts.csv")
-readr::write_csv(nwis_phos_ts, "phos_nwis_ts.csv")
-readr::write_csv(nwis_nitr_ts, "nitr_nwis_ts.csv")
+nwis_chl_ts %>% readr::write_csv(glue("{data_dir}/us-data/chl_nwis_all_10yr_ts.csv"))
+nwis_phos_ts %>% readr::write_csv(glue("{data_dir}/us-data/phos_nwis_all_10yr_ts.csv"))
+nwis_nitr_ts %>% readr::write_csv(glue("{data_dir}/us-data/nitr_nwis_all_10yr_ts.csv"))
 ```
 
+Read in from saved files
 
+```{r nwis_ts_x_parm}
+nwis_chl_ts <- readr::read_csv(glue("{data_dir}/us-data/chl_nwis_all_10yr_ts.csv"))
+nwis_phos_ts <- readr::read_csv(glue("{data_dir}/us-data/phos_nwis_all_10yr_ts.csv"))
+nwis_nitr_ts <- readr::read_csv(glue("{data_dir}/us-data/nitr_nwis_all_10yr_ts.csv"))
+```
+
+View table
 ```{r, include = FALSE}
 kable(nwis_chl_ts) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
@@ -215,12 +228,24 @@ sites_all3 <- nwis_nitr_ts %>%
 length(sites_all3)
 ```
 
-## Get summary of N, P, chl parameters for a site
+Get information about sites and filter to just stream sites (258 sites)
 
 ```{r}
-site_id <- sites_all3[35]
+site_info <- dataRetrieval::readNWISsite(sites_all3)
+site_info %>% group_by(site_tp_cd) %>% summarize(n_sitetype = n())
+sites_all3_streams <- site_info %>% filter(site_tp_cd == "ST") %>% pull(site_no)
+data.frame(site_no = sites_all3_streams) %>% write_csv("/nfs/rivershift-data/us-data/sites_all3_streams.csv")
+```
+
+## Get summary data of N, P, chl parameters for a site
+
+> readNWISqw
+
+```{r read_nwis_qw}
+# site_id <- sites_all3_streams[35] # for testing code in function
 
 get_nwis_site_data <- function(site_id){
+    data_dir <- "/nfs/rivershift-data/"
 
     nwis_data_site <- purrr::map(list(npc_codes1, npc_codes2, npc_codes3),
                                  ~readNWISqw(siteNumbers = site_id,
@@ -232,7 +257,7 @@ get_nwis_site_data <- function(site_id){
     
   
     readr::write_csv(nwis_data_site, 
-                   glue::glue("data/nwis_site_data/nwis-data_{site_id}.csv"))
+                   glue::glue("{data_dir}/us-data/nwis_site_data/nwis-data_{site_id}.csv"))
     
   nwis_data_site10yr <- nwis_data_site %>% 
     group_by(parm_cd) %>% 
@@ -250,53 +275,27 @@ get_nwis_site_data <- function(site_id){
   dplyr::select(-min_datetime, -max_datetime, -date_range_interval)
 
   readr::write_csv(nwis_data_site10yr, 
-                   glue::glue("data/nwis_site_summaries/nwis-summary_{site_id}.csv"))
+                   glue::glue("{data_dir}/us-data/nwis_site_summaries/nwis-summary_{site_id}.csv"))
 
   # return(nwis_data_site10yr)
 }
 ```
 
+Run function over all stream sites with all 3 parameters
 
 ```{r}
-get_nwis_site_data(site_id = sites_all3[1])
-purrr::walk(sites_all3, ~get_nwis_site_data(.x))
+get_nwis_site_data(site_id = sites_all3_streams[1])
+purrr::walk(sites_all3_streams, ~get_nwis_site_data(.x))
 
-purrr::walk(sites_all3[347:length(sites_all3)], ~get_nwis_site_data(.x))
-sites_all3[338] # no data? 
-grep("14206425", sites_all3)
+# for troubleshooting
+purrr::walk(sites_all3_streams[225:length(sites_all3_streams)], ~get_nwis_site_data(.x))
+# grep("14206425", sites_all3_streams)
+# sites_all3_streams[224] # for some reason no site data returned from site 14206440 
 # read in all sites and save as one big table
 # readr::write_csv(nwis_data_10yr_sums, "nwis_all3_10yr_summaries.csv")
 ```
 
 
-## Get data values from NWIS
-
-Example of getting data from one row of time series data frame with `readNWISqw` function.
-
-```{r}
-my_site <-  nwis_chl_ts$site_no[2]
-my_param <- nwis_chl_ts$parm_cd[2]
-
-chl_nwis_data_ex <- readNWISqw(siteNumbers = my_site,
-                     parameterCd = my_param)
-
-```
-
-## Plot NWIS data
-
-use attributes of the returned data frame
-
-```{r}
-varInfo <- attributes(chl_nwis_data_ex)[["variableInfo"]]
-siteInfo <- attributes(chl_nwis_data_ex)[["siteInfo"]]
-
-chl_nwis_data_ex %>%
-  ggplot(aes(x = startDateTime, y = result_va)) +
-  geom_point() +
-  ylab(glue('{varInfo$srsname} ({varInfo$parameter_units})')) +
-  xlab(element_blank()) +
-  ggtitle(siteInfo$station_nm)
-```
 
 # Water Quality Portal 
 
@@ -397,20 +396,29 @@ wqp_col_types <- cols("begin_date" = "D",
                       "ContributingDrainageAreaMeasure.MeasureValue" = "n",
                       "SourceMapScaleNumeric" = "n")
 
-wqp_phos_ts <- purrr::map_df(fs::dir_ls("data", regexp = "wqp.*phos"),
+wqp_phos_ts <- purrr::map_df(fs::dir_ls("local-data", regexp = "wqp.*phos"),
                               ~readr::read_csv(.x, col_types = wqp_col_types))
 
-wqp_nitr_ts <- purrr::map_df(fs::dir_ls("data", regexp = "wqp.*nitr"),
+wqp_nitr_ts <- purrr::map_df(fs::dir_ls("local-data", regexp = "wqp.*nitr"),
                               ~readr::read_csv(.x, col_types = wqp_col_types))
 
-wqp_chl_ts <- purrr::map_df(fs::dir_ls("data", regexp = "wqp.*chl"),
+wqp_chl_ts <- purrr::map_df(fs::dir_ls("local-data", regexp = "wqp.*chl"),
                               ~readr::read_csv(.x, col_types = wqp_col_types))
 
 ```
 
 ```{r}
-wqp_phos_ts %>% readr::write_csv("phos_wqp_ts.csv")
-wqp_nitr_ts %>% readr::write_csv("nitr_wqp_ts.csv")
-wqp_chl_ts %>% readr::write_csv("chl_wqp_ts.csv")
+wqp_phos_ts %>% readr::write_csv(glue("{data_dir}/us-data/phos_wqp_all_10yr_ts.csv"))
+wqp_nitr_ts %>% readr::write_csv(glue("{data_dir}/us-data/nitr_wqp_all_10yr_ts.csv"))
+wqp_chl_ts %>% readr::write_csv(glue("{data_dir}/us-data/chl_wqp_all_10yr_ts.csv"))
 ```
+
+Read in
+
+```{r}
+wqp_phos_ts <- readr::read_csv(glue("{data_dir}/us-data/phos_wqp_all_10yr_ts.csv"))
+wqp_nitr_ts <- readr::read_csv(glue("{data_dir}/us-data/nitr_wqp_all_10yr_ts.csv"))
+wqp_chl_ts <- readr::read_csv(glue("{data_dir}/us-data/chl_wqp_all_10yr_ts.csv"))
+```
+
 
