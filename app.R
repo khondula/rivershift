@@ -24,7 +24,7 @@ ui <- fluidPage(
         sidebarPanel(
             selectInput("site_no",
                         "Site ID:",
-                        choices = sites_all3_streams),
+                        choices = sites_all3_streams$site_no),
             width = 2
         ),
 
