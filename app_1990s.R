@@ -77,7 +77,7 @@ server <- function(input, output) {
                             result_va = col_double(),
                             startDateTime = col_character()
                         )) %>%
-            mutate(start_datetime = as.POSIXct(startDateTime))
+            mutate(start_datetime = as.POSIXct(startDateTime)) 
     })
     
     output$ts_plots <- renderPlot({
