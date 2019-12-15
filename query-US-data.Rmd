@@ -281,6 +281,50 @@ get_nwis_site_data <- function(site_id){
 }
 ```
 
+> readNWISqw (20 years beetwen 1980 and 2010; average values if anual visits <6; 
+monthly/ daily values if anual visits > 6)
+
+```{r}
+get_nwis_site_data <- function(site_id){
+    data_dir <- "/nfs/rivershift-data/"
+
+    nwis_data_site <- purrr::map(list(npc_codes1, npc_codes2, npc_codes3),
+                                 ~readNWISqw(siteNumbers = site_id,
+                           parameterCd = .x)) %>%
+    purrr::map(~mutate(.x, rpt_lev_va = as.character(rpt_lev_va))) %>% 
+    purrr::map(~mutate(.x, sample_dt = as.character(sample_dt))) %>% 
+    purrr::map(~mutate(.x, prep_set_no = as.character(prep_set_no))) %>% 
+    bind_rows()
+    
+  
+    readr::write_csv(nwis_data_site, 
+                   glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s_{site_id}.csv"))
+    
+  nwis_data_site20yr <- nwis_data_site %>% 
+    group_by(parm_cd) %>% 
+    summarise(n_count = n(),
+            min_datetime = as.Date(min(startDateTime)),
+            max_datetime = as.Date(max(startDateTime)),
+            min_year = lubridate::year(min(startDateTime)),
+            max_year = lubridate::year(max(startDateTime))) %>%
+  mutate(date_range_interval = ymd(min_datetime) %--% ymd(max_datetime),
+         date_range_yrs = suppressMessages(as.period(date_range_interval))/years()) %>%
+  left_join(npc_codes_df, by = c("parm_cd" = "parameter_cd")) %>%
+  arrange(-n_count) %>% 
+    #filter(date_range_yrs > 20) %>%
+    filter(min_year > 1980) %>%
+    filter(max_year < 2010) %>%
+        mutate(site_no = site_id) %>%
+  dplyr::select(-min_datetime, -max_datetime, -date_range_interval)
+
+  readr::write_csv(nwis_data_site20yr, 
+                   glue::glue("{data_dir}/us-data/nwis_site_summaries_1990s/nwis-summary_1990s_{site_id}.csv"))
+
+  # return(nwis_data_site10yr)
+}
+```
+
+
 Run function over all stream sites with all 3 parameters
 
 ```{r}
