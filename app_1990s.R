@@ -66,7 +66,7 @@ server <- function(input, output) {
     output$site_data_df <- renderTable({
         # head(site_data())
         # site_data() %>% mutate(startDateTime = as.POSIXct(startDateTime))
-        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s{input$site_no}.csv"),
+        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s{input$site_no}.csv"), 
                         col_types = cols_only(
                             agency_cd = col_character(),
                             site_no = col_character(),
