@@ -281,8 +281,7 @@ get_nwis_site_data <- function(site_id){
 }
 ```
 
-> readNWISqw (20 years beetwen 1980 and 2010; average values if anual visits <6; 
-monthly/ daily values if anual visits > 6)
+> readNWISqw (20 years beetwen 1980 and 2010)
 
 ```{r}
 get_nwis_site_data <- function(site_id){
