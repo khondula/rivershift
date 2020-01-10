@@ -157,8 +157,10 @@ purrr::walk(state_terr_names[22:54], ~get_state_data(.x))
 ```
 
 ```{r}
-stns_data_5yrs <- fs::dir_ls("legacy-storet-chl") %>%
+stns_data_5yrs <- fs::dir_ls("/nfs/rivershift-data/us-data/legacy-storet-chl") %>%
   purrr::map_df(~read_csv(.x, col_types = "ccccccdddcccDcDc"), .id = "county") 
+
+stns_data_5yrs %>% readr::write_csv("/nfs/rivershift-data/us-data/legacy-storet-chl-data.csv")
 
 df <- stns_data_5yrs %>% 
   group_by(Station, Param, county) %>%
@@ -169,5 +171,51 @@ df <- stns_data_5yrs %>%
   arrange(-duration_yrs) %>% filter(duration_yrs > 5) %>%
   mutate(Station_Param = paste0(Station, "_", Param)) %>%
   filter(no_obs > duration_yrs)
+
+df %>% readr::write_csv("/nfs/rivershift-data/us-data/legacy-storet-chl-data-summary.csv")
+
 ```
 
+```{r}
+df %>% head()
+stns_data_5yrs %>% head()
+
+```
+
+```{r}
+stations <- unique(df$Station)
+# station <- "E0B80702023"
+# station <- stations[1]
+
+save_chl_plot <- function(station){
+  
+station_name <- filter(stns_data_5yrs, Station == station) %>% 
+  pull(`Station Name`) %>% unique()
+station_state <- filter(stns_data_5yrs, Station == station) %>% 
+  pull(`State Name`) %>% unique() %>% head(1)
+
+gg <- stns_data_5yrs %>%
+  filter(Station == station) %>%
+  ggplot(aes(x = `Start Date`, y = `Result Value`)) +
+  geom_line(alpha = 0.25) +
+  geom_point(pch = 21) +
+  # scale_y_log10() +
+  facet_wrap(vars(Param)) +
+  theme_bw() +
+  ggtitle(paste0(station, " - ", station_state, "\n", station_name))
+
+state_dir <- glue("/nfs/rivershift-data/us-data/storet-plots/{station_state}")
+
+if(!fs::dir_exists(state_dir)){fs::dir_create(state_dir)}
+
+pdf(glue("{state_dir}/chl_{station}.pdf"), width = 10, height = 3.5)
+print(gg)
+dev.off()
+
+}
+
+# save_chl_plot(stations[2])
+purrr::walk(stations, ~save_chl_plot(.x))
+```
+
+station E0B80702023
