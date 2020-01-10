@@ -1,0 +1,173 @@
+---
+title: "Legacy STORET data"
+author: "Kelly Hondula"
+date: "1/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glue)
+library(curl)
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+## Legacy storet exports
+
+Download and unzip each of the state and territory files from epa ftp site
+
+```{r}
+url <- "ftp://newftp.epa.gov/storet/exports/"
+state_terr_names <- c(gsub(" ", "_", x = state.name), c("American_Samoa", "District_Of_Columbia", "Puerto_Rico", "Virgin_Islands"))
+zipnames <- paste0(state_terr_names, ".zip"))
+urls <- paste0(url, zipnames)
+local_names <- paste0("legacy_storet/", zipnames)
+
+purrr::walk2(urls, local_names, ~curl::curl_fetch_disk(.x, .y))
+purrr::walk(local_names, ~unzip(.x))
+```
+
+
+Parameters from ftp://newftp.epa.gov/storet/exports/reference_tables/
+
+```{r}
+parameters <- readr::read_tsv("legacy_storet/parameter.txt")
+parameters <- parameters %>%
+  mutate(code_lp = stringr::str_pad(`Parameter No.`, 5, side = "left", pad = "0"))
+
+chl_parameters <- parameters[grep(pattern = "CHLOROPHYLL", parameters$`Full Name`),]
+chl_parameter_codes <- chl_parameters$code_lp 
+```
+
+
+```{r}
+state_terr_names
+state_terr_name <- state_terr_names[1]
+
+get_chl_info <- function(state_terr_name){
+  
+  folder_name <- file.path("legacy_storet", state_terr_name)
+  filenames <- fs::dir_ls(folder_name, regexp = "_inv.txt")
+  basenames <- basename(filenames) %>% tools::file_path_sans_ext()
+  df <- purrr::map_df(filenames, ~read_tsv(.x, skip = 7, 
+                                       col_names = c("Code", "ShortName", "LongName",
+                                                     "NoStns", "NoObs", "FirstDate",
+                                                     "LastDate", "MinValue", "MaxValue",
+                                                     "AvgValue"),
+                                       col_types = "cccddDDddd"), .id = "filename")  %>% 
+  dplyr::filter(Code %in% chl_parameter_codes)
+  df %>% readr::write_csv(path = glue::glue("legacy_storet/state-summaries/{state_terr_name}.csv"))
+  
+}
+
+purrr::walk(state_terr_names, ~get_chl_info(.x))
+
+storet_10yrs <- fs::dir_ls("legacy_storet/state-summaries") %>%
+  purrr::map_df(~read_csv(.x), .id = "state") %>%
+  mutate(state = basename(state), filename = basename(filename)) %>%
+  mutate(duration = floor(difftime(LastDate, FirstDate, units = "days")/365)) %>% 
+  dplyr::filter(duration >= 10) 
+
+```
+
+What parameter codes are used most often?
+
+```{r}
+storet_10yrs %>%
+  dplyr::group_by(Code) %>%
+  summarise(n_stns = sum(NoStns)) %>% 
+  arrange(-n_stns) %>%
+  mutate(code_lp = as.character(Code)) %>%
+  left_join(parameters) %>% dplyr::select(Code, n_stns, `Full Name`)
+```
+
+Parameter Codes to use
+
+```{r}
+main_chl_codes <- c(32209, 32210, 32211, 32230, 32217)
+```
+
+# Chl data
+
+> Lastly, each state folder will contain a series of
+subfolders, one for each county, with names like 
+"c:\South_Dakota\SD_Fall_River", each of which contains
+one or more files with the suffix "sta", containing
+detailed descriptions of all the Legacy STORET stations
+in the county, and one or more files with the suffix "res",
+containing all the results ever reported of monitoring 
+activities conducted within the county.  These sets of
+files are limited to 50,000 rows each, so that each may 
+be loaded into a typical spread sheet environment like
+Microsoft Excel (R). 
+
+For each of the county files in the storet_10yrs spreadsheet, read in the data
+from the res files, combine if more than 1 file, and filter to just the chl. 
+
+```{r}
+# function to save chl data from STATIONS with 5+ years of data for a county
+storet_county <- storet_counties[78]
+get_county_data <- function(state_terr_name, storet_county){
+  
+  county_chl_data <- fs::dir_ls(glue("legacy_storet/{state_terr_name}/{storet_county}"), 
+                              regexp = "_res_") %>%
+  purrr::map_df(~readr::read_tsv(.x, col_types = c("ccccccdddcccDcDcdccccccc"))) %>%
+  slice(-1) %>%
+  filter(Param %in% as.character(main_chl_codes))
+
+county_summary <- county_chl_data %>%
+  group_by(Station, Param) %>%
+  summarise(no_obs = n(),
+            min_date = min(`Start Date`),
+            max_date = max(`Start Date`)) %>%
+  mutate(duration_yrs = round(as.numeric(difftime(max_date, min_date, "days"))/365, 2)) %>%
+  arrange(-duration_yrs) %>% filter(duration_yrs > 5) %>%
+  mutate(Station_Param = paste0(Station, "_", Param))
+
+chl_data_5yrs <- county_chl_data %>%
+  mutate(Station_Param = paste0(Station, "_", Param)) %>%
+  filter(Station_Param %in% county_summary$Station_Param)
+
+chl_data_5yrs %>% 
+  write_csv(glue("legacy-storet-chl/{storet_county}.csv"))  
+}
+
+# function to save chl data 5+ years for whole state
+state_terr_name <- state_terr_names[22]
+get_state_data <- function(state_terr_name){
+  
+  storet_counties <- storet_10yrs %>%
+    filter(state == glue("{state_terr_name}.csv")) %>% 
+    pull(filename) %>%
+    gsub("_inv.txt", "", .)
+  
+  purrr::walk2(state_terr_name,
+               storet_counties,
+               ~get_county_data(state_terr_name = .x,
+                                storet_county = .y))
+  
+}
+
+get_state_data(state_terr_names[4])
+
+purrr::walk(state_terr_names[22:54], ~get_state_data(.x))
+
+```
+
+```{r}
+stns_data_5yrs <- fs::dir_ls("legacy-storet-chl") %>%
+  purrr::map_df(~read_csv(.x, col_types = "ccccccdddcccDcDc"), .id = "county") 
+
+df <- stns_data_5yrs %>% 
+  group_by(Station, Param, county) %>%
+  summarise(no_obs = n(),
+            min_date = min(`Start Date`),
+            max_date = max(`Start Date`)) %>%
+  mutate(duration_yrs = round(as.numeric(difftime(max_date, min_date, "days"))/365, 2)) %>%
+  arrange(-duration_yrs) %>% filter(duration_yrs > 5) %>%
+  mutate(Station_Param = paste0(Station, "_", Param)) %>%
+  filter(no_obs > duration_yrs)
+```
+
