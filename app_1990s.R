@@ -12,7 +12,6 @@ library(shiny)
 data_dir <- "/nfs/rivershift-data"
 sites_all3_streams <- readr::read_csv("/nfs/rivershift-data/us-data/sites_all3_streams.csv", col_types = "c")
 
-    
 # Define UI for application that draws a histogram
 ui <- fluidPage(
 
@@ -43,13 +42,13 @@ ui <- fluidPage(
 server <- function(input, output) {
 
     output$summary_table <- renderTable({
-        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_summaries_1990s/nwis-summary_1990s{input$site_no}.csv"),
+        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_summaries_1990s/nwis-summary_1990s_{input$site_no}.csv"),
                         col_types = c("ciiincccccc")) %>%
             dplyr::select(srsname, parameter_nm, parameter_units, date_range_yrs, n_count, min_year, max_year)
     })
     
     site_data <- reactive({
-        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s{input$site_no}.csv"),
+        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s_{input$site_no}.csv"),
                         col_types = cols_only(
                             agency_cd = col_character(),
                             site_no = col_character(),
@@ -66,7 +65,7 @@ server <- function(input, output) {
     output$site_data_df <- renderTable({
         # head(site_data())
         # site_data() %>% mutate(startDateTime = as.POSIXct(startDateTime))
-        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s{input$site_no}.csv"), 
+        readr::read_csv(file = glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s_{input$site_no}.csv"), 
                         col_types = cols_only(
                             agency_cd = col_character(),
                             site_no = col_character(),
