@@ -43,6 +43,7 @@ Create variable for data directory to save some typing
 
 ```{r}
 data_dir <- "/nfs/rivershift-data"
+data_dir <- "~/rivershift/"
 ```
 
 
@@ -200,15 +201,19 @@ nwis_nitr_ts %>% readr::write_csv(glue("{data_dir}/us-data/nitr_nwis_all_10yr_ts
 Read in from saved files
 
 ```{r nwis_ts_x_parm}
-nwis_chl_ts <- readr::read_csv(glue("{data_dir}/us-data/chl_nwis_all_10yr_ts.csv"))
-nwis_phos_ts <- readr::read_csv(glue("{data_dir}/us-data/phos_nwis_all_10yr_ts.csv"))
-nwis_nitr_ts <- readr::read_csv(glue("{data_dir}/us-data/nitr_nwis_all_10yr_ts.csv"))
+#nwis_chl_ts <- readr::read_csv(glue("{data_dir}/us-data/chl_nwis_all_10yr_ts.csv"))
+nwis_phos_ts <- readr::read_csv(glue("{data_dir}/us-data/phos_nwis_all_10yr_ts.csv")) %>%
+  filter(ymd(begin_date)>"1980-01-01") 
+
+nwis_nitr_ts <- readr::read_csv(glue("{data_dir}/us-data/nitr_nwis_all_10yr_ts.csv")) %>%
+  filter(ymd(begin_date)>"1980-01-01") 
 ```
 
 Read in from saved files and filter out periphyton sites
 ```{r}
 nwis_chl_ts <- readr::read_csv(glue("{data_dir}/us-data/chl_nwis_all_10yr_ts.csv")) %>%
-    filter(stringr::str_detect(parameter_units, pattern = fixed('ug/l', ignore_case = TRUE)))
+    filter(stringr::str_detect(parameter_units, pattern = fixed('ug/l', ignore_case = TRUE))) %>%
+  filter(ymd(begin_date)>"1980-01-01") 
 ```
 
 
@@ -248,15 +253,17 @@ length(sites_all3)
 ```
 
 
-Get information about sites and filter to just stream sites (ST) (152 sites)
+Get information about sites and filter to just stream sites (ST) (116 sites)
 
 ```{r}
 site_info <- dataRetrieval::readNWISsite(sites_all3)
 site_info %>% group_by(site_tp_cd) %>% summarize(n_sitetype = n())
 sites_all3_streams <- site_info %>% filter(site_tp_cd == "ST") %>% pull(site_no)
-data.frame(site_no = sites_all3_streams) %>%
-write_csv(glue("{data_dir}/us-data/sites_all3_streams.csv"))
-#write_csv("sites_all3_streams.csv")
+sites_all3_streams <- sites_all3_streams[-98]
+#data.frame(site_no = sites_all3_streams) %>%
+data.frame(site_no = sites_all3_streams) %>% #something wrong with site id 98
+#write_csv(glue("{data_dir}/us-data/sites_all3_streams.csv"))
+write_csv("sites_all3_streams.csv")
 ```
 
 ## Get summary data of N, P, chl parameters for a site
@@ -264,66 +271,28 @@ write_csv(glue("{data_dir}/us-data/sites_all3_streams.csv"))
 > readNWISqw
 
 ```{r read_nwis_qw}
-# # site_id <- sites_all3_streams[35] # for testing code in function
+##site_id <- sites_all3_streams[98] # for testing code in function
 # 
-# get_nwis_site_data <- function(site_id){
-#     data_dir <- "/nfs/rivershift-data/"
-# 
-#     nwis_data_site <- purrr::map(list(npc_codes1, npc_codes2, npc_codes3),
-#                                  ~readNWISqw(siteNumbers = site_id,
-#                            parameterCd = .x)) %>%
-#     purrr::map(~mutate(.x, rpt_lev_va = as.character(rpt_lev_va))) %>% 
-#     purrr::map(~mutate(.x, sample_dt = as.character(sample_dt))) %>% 
-#     purrr::map(~mutate(.x, prep_set_no = as.character(prep_set_no))) %>% 
-#     bind_rows()
-#     
-#   
-#     readr::write_csv(nwis_data_site, 
-#                    glue::glue("{data_dir}/us-data/nwis_site_data/nwis-data_{site_id}.csv"))
-#     
-#   nwis_data_site10yr <- nwis_data_site %>% 
-#     group_by(parm_cd) %>% 
-#     summarise(n_count = n(),
-#             min_datetime = as.Date(min(startDateTime)),
-#             max_datetime = as.Date(max(startDateTime)),
-#             min_year = lubridate::year(min(startDateTime)),
-#             max_year = lubridate::year(max(startDateTime))) %>%
-#   mutate(date_range_interval = ymd(min_datetime) %--% ymd(max_datetime),
-#          date_range_yrs = suppressMessages(as.period(date_range_interval))/years()) %>%
-#   left_join(npc_codes_df, by = c("parm_cd" = "parameter_cd")) %>%
-#   arrange(-n_count) %>% 
-#     filter(date_range_yrs > 10) %>%
-#         mutate(site_no = site_id) %>%
-#   dplyr::select(-min_datetime, -max_datetime, -date_range_interval)
-# 
-#   readr::write_csv(nwis_data_site10yr, 
-#                    glue::glue("{data_dir}/us-data/nwis_site_summaries/nwis-summary_{site_id}.csv"))
-# 
-#   # return(nwis_data_site10yr)
-# }
-```
 
-> readNWISqw (20 years beetwen 1980 and 2010, >6 visits, Chla phytoplankton)
-
-```{r}
 get_nwis_site_data <- function(site_id){
-    data_dir <- "/nfs/rivershift-data/"
+    #data_dir <- "/nfs/rivershift-data/"
+    data_dir <- "~/rivershift/"
     nwis_data_site <- purrr::map(list(npc_codes1, npc_codes2, npc_codes3),
                                  ~readNWISqw(siteNumbers = site_id,
                            parameterCd = .x)) %>%
-    purrr::map(~mutate(.x, rpt_lev_va = as.character(rpt_lev_va))) %>% 
-    purrr::map(~mutate(.x, sample_dt = as.character(sample_dt))) %>% 
-    purrr::map(~mutate(.x, prep_set_no = as.character(prep_set_no))) %>% 
+    purrr::map(~mutate(.x, rpt_lev_va = as.character(rpt_lev_va))) %>%
+    purrr::map(~mutate(.x, sample_dt = as.character(sample_dt))) %>%
+    purrr::map(~mutate(.x, prep_set_no = as.character(prep_set_no))) %>%
     purrr::map(~mutate(.x, anl_set_no = as.character(anl_set_no))) %>% 
 
     bind_rows()
-    
-  
-    readr::write_csv(nwis_data_site, 
-                   glue::glue("{data_dir}/us-data/nwis_site_data_1990s/nwis-data_1990s_{site_id}.csv"))
-    
-  nwis_data_site20yr <- nwis_data_site %>% 
-    group_by(parm_cd) %>% 
+
+
+    readr::write_csv(nwis_data_site,
+                   glue::glue("{data_dir}/us-data/nwis_site_data/nwis-data_{site_id}.csv"))
+
+  nwis_data_site10yr <- nwis_data_site %>%
+    group_by(parm_cd) %>%
     summarise(n_count = n(),
             min_datetime = as.Date(min(startDateTime)),
             max_datetime = as.Date(max(startDateTime)),
@@ -332,19 +301,16 @@ get_nwis_site_data <- function(site_id){
   mutate(date_range_interval = ymd(min_datetime) %--% ymd(max_datetime),
          date_range_yrs = suppressMessages(as.period(date_range_interval))/years()) %>%
   left_join(npc_codes_df, by = c("parm_cd" = "parameter_cd")) %>%
-  arrange(-n_count) %>% 
-    #filter(n_count > 6) %>%
-    filter(min_year > 1980) %>%
-    filter(max_year < 2010) %>%
+  arrange(-n_count) %>%
+    filter(date_range_yrs > 10) %>%
         mutate(site_no = site_id) %>%
   dplyr::select(-min_datetime, -max_datetime, -date_range_interval)
 
-  readr::write_csv(nwis_data_site20yr, 
-                   glue::glue("{data_dir}/us-data/nwis_site_summaries_1990s/nwis-summary_1990s_{site_id}.csv"))
+  readr::write_csv(nwis_data_site10yr,
+                   glue::glue("{data_dir}/us-data/nwis_site_summaries/nwis-summary_{site_id}.csv"))
 
-  # return(nwis_data_site10yr)
+#   # return(nwis_data_site10yr)
 }
-
 ```
 
 Run function over all stream sites with all 3 parameters
